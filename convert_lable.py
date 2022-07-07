@@ -3,22 +3,30 @@ import pickle
 import os
 import h5py
 from PIL import Image
-def convert_data(path, im_folder, id_prefix):
+def convert_data(path, im_folder, id_prefix, obj_start_id):
     mat_f = h5py.File(path, 'r')
     names = get_names(mat_f)
     objs  = get_objs(mat_f)
     assert len(names) == len(objs)
     annos = []
+    obj_id = obj_start_id
+    
     for name,obj in zip(names,objs):
         im = {}
         im['file_name'] = name
-        im['id'] = '{}{:07d}.png'.format(id_prefix, int(name[:-4]))
+        im['id'] = int('{}{:07d}'.format(id_prefix, int(name[:-4])))
         w,h=get_im_info(os.path.join(im_folder, name))
         im['height'] = h
         im['width'] = w
+        for o in obj:
+            o['image_id'] = int('{}{:07d}'.format(id_prefix, int(name[:-4])))
+            o['id'] = int(obj_id)
+            obj_id += 1
+        
         im['objects'] = obj
         #print(im)
         annos.append(im)
+    print('There are {} objects'.format(obj_id-obj_start_id-1))
     return annos
 
 def get_im_info(im_path):
@@ -54,7 +62,9 @@ def get_box_single_image(n, box_obj, mat_f):
     for x,y,w,h,l in zip(left, top, width, height, label):
         obj = {}
         obj['bbox'] = [x,y,w,h]
-        obj['category_id'] = l
+        obj['area'] = w*h
+        obj['category_id'] = int(l)
+        obj['iscrowd'] = 0
         objs.append(obj)
     return objs
 
@@ -67,6 +77,7 @@ def get_names(mat_f):
 
 if __name__=="__main__":
     dataset = ['train','test', 'extra']
+    obj_start_ids = [0, int(1e7), int(2e7)]
     for i, d in enumerate(dataset):
         print('converting dataset part {}'.format(d))
         out_path = './data/{}.pkl'.format(d)
@@ -75,7 +86,7 @@ if __name__=="__main__":
         #print(im_folder)
         #mat_f = h5py.File(data_path,'r')
         #num_img = mat_f['/digitStruct/name'].size
-        anno = convert_data(data_path, im_folder, id_prefix=i)
+        anno = convert_data(data_path, im_folder, id_prefix=i, obj_start_id=obj_start_ids[i])
         out_data = {}
         out_data[d] = anno
         with open(out_path, 'wb') as f:
